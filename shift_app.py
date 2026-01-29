@@ -17,15 +17,28 @@ def get_shift_info(target_date):
     else:
         return "BD", "#FFF3CD", "#856404" # 橘色
 
-# --- 3. 網頁設定 ---
+# --- 3. 網頁設定與優化樣式 ---
 st.set_page_config(page_title="二休二排班看板", layout="centered")
 
-# 用 CSS 讓表格在手機上更好看
+# 強化星期標題的視覺效果
 st.markdown("""
     <style>
-    .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    .cal-table th, .cal-table td { border: 1px solid #ddd; text-align: center; padding: 8px 2px; font-size: 14px; }
-    .cal-table th { background-color: #f0f2f6; }
+    .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 10px; }
+    .cal-table th { 
+        background-color: #e2e8f0 !important; /* 強制淺灰色背景 */
+        color: #1a202c !important;           /* 強制深黑色文字 */
+        text-align: center; 
+        padding: 12px 2px; 
+        font-size: 16px; 
+        font-weight: bold;
+        border: 1px solid #cbd5e0; 
+    }
+    .cal-table td { 
+        border: 1px solid #cbd5e0; 
+        text-align: center; 
+        padding: 12px 2px; 
+        vertical-align: middle;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -39,12 +52,12 @@ this_date = date.today()
 sel_year = c1.selectbox("年份", range(2025, 2030), index=(this_date.year - 2025))
 sel_month = c2.selectbox("月份", range(1, 13), index=(this_date.month - 1))
 
-# 生成月曆
+# 生成月曆 HTML
 cal = calendar.monthcalendar(sel_year, sel_month)
-html_cal = '<table class="cal-table"><tr>'
+html_cal = '<table class="cal-table"><thead><tr>'
 for w in ["日","一","二","三","四","五","六"]:
     html_cal += f'<th>{w}</th>'
-html_cal += '</tr>'
+html_cal += '</tr></thead><tbody>'
 
 for week in cal:
     html_cal += '<tr>'
@@ -54,19 +67,18 @@ for week in cal:
         else:
             cur_date = date(sel_year, sel_month, day)
             team, bg, txt = get_shift_info(cur_date)
-            html_cal += f'<td style="background-color:{bg}; color:{txt}; font-weight:bold;">{day}<br><span style="font-size:10px;">{team}</span></td>'
+            html_cal += f'<td style="background-color:{bg}; color:{txt}; font-weight:bold;">{day}<br><span style="font-size:11px;">{team}</span></td>'
     html_cal += '</tr>'
-html_cal += '</table>'
+html_cal += '</tbody></table>'
 
-# 只有這一行會印出月曆，確保不會看到代碼
 st.markdown(html_cal, unsafe_allow_html=True)
-st.caption("🟢 綠色: AC班 | 🟡 橘色: BD班")
+st.caption("🟢 綠色: AC班當班 | 🟡 橘色: BD班當班")
 
 st.divider()
 
-# --- 5. 當日值班人員 ---
-st.subheader("👥 人員查詢")
-pick_date = st.date_input("選擇日期", date.today())
+# --- 5. 當日值班人員 (回歸姓名顯示) ---
+st.subheader("👥 當日值班名單")
+pick_date = st.date_input("選擇日期查詢人員", date.today())
 team_type, _, _ = get_shift_info(pick_date)
 on_duty_teams = ['A', 'C'] if team_type == "AC" else ['B', 'D']
 
@@ -77,31 +89,35 @@ try:
         on_duty_staff = [s for s in all_staff if s['team'] in on_duty_teams]
         col1, col2 = st.columns(2)
         with col1:
-            st.write("☀️ **日班**")
-            for s in [p for p in on_duty_staff if p['shift_type'] == "日班"]:
-                st.success(f"👤 {s['name']}")
+            st.markdown("#### ☀️ 日班")
+            day_people = [p for p in on_duty_staff if p['shift_type'] == "日班"]
+            for s in day_people: st.success(f"👤 {s['name']}")
+            if not day_people: st.write("無人上班")
         with col2:
-            st.write("🌙 **夜班**")
-            for s in [p for p in on_duty_staff if p['shift_type'] == "夜班"]:
-                st.info(f"👤 {s['name']}")
-except:
-    st.write("尚未建立名單")
+            st.markdown("#### 🌙 夜班")
+            night_people = [p for p in on_duty_staff if p['shift_type'] == "夜班"]
+            for s in night_people: st.info(f"👤 {s['name']}")
+            if not night_people: st.write("無人上班")
+    else:
+        st.info("💡 目前名單為空，請從下方展開『管理工具』來新增員工。")
+except Exception as e:
+    st.error(f"讀取名單失敗: {e}")
 
-# --- 6. 管理工具 (收納在下面) ---
+# --- 6. 管理工具 ---
 with st.expander("🛠️ 人員與備註管理"):
-    st.write("### ✨ 新增員工")
-    n_name = st.text_input("姓名")
+    st.write("### ✨ 快速新增員工")
+    n_name = st.text_input("輸入員工姓名")
     c_a, c_b = st.columns(2)
-    n_team = c_a.selectbox("小組", ["A", "B", "C", "D"])
-    n_type = c_b.selectbox("時段", ["日班", "夜班"])
-    if st.button("➕ 加入"):
+    n_team = c_a.selectbox("所屬小組", ["A", "B", "C", "D"])
+    n_type = c_b.selectbox("班別時段", ["日班", "夜班"])
+    if st.button("➕ 加入名單", use_container_width=True):
         if n_name:
             supabase.table("staff_list").insert({"name":n_name, "team":n_team, "shift_type":n_type}).execute()
             st.rerun()
     
     st.write("---")
-    st.write("### 📝 今日備註")
-    note = st.text_area("內容")
-    if st.button("🚀 儲存"):
+    st.write("### 📝 今日記事備註")
+    note = st.text_area("內容...")
+    if st.button("🚀 儲存到雲端", use_container_width=True):
         supabase.table("shift_records").insert({"user_id":"Old_Cha", "shift_date":str(pick_date), "shift_type":team_type, "note":note}).execute()
-        st.success("已儲存")
+        st.success("已成功存檔！")
