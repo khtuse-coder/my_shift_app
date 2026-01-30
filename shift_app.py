@@ -4,8 +4,8 @@ import calendar
 from supabase import create_client
 
 # --- 1. 雲端連線設定 ---
-SUPABASE_URL = "https://iomqohzyuwtbfxnoavjf.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvbXFvaHp5dXd0YmZ4bm9hdmpmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk2NTUxMzUsImV4cCI6MjA4NTIzMTEzNX0.raqhaFGXC50xWODruMD0M26HgDq0XC74KaOe48UpXP8"
+SUPABASE_URL = ["SUPABASE_URL"]
+SUPABASE_KEY = ["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- 2. 國定假日設定 (包含 2026 與 2027) ---
@@ -121,3 +121,4 @@ with st.expander("🛠️ 人員與備註管理"):
     if st.button("➕ 加入"):
         supabase.table("staff_list").insert({"name":n_name, "team":n_team, "shift_type":n_type}).execute()
         st.rerun()
+
