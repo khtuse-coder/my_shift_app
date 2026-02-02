@@ -127,7 +127,7 @@ for week in weeks:
         <div class="{cls}" style="background:{bg}"
              onclick="
               window.parent.postMessage(
-                { type: 'pick-date', value: '{d_str}' },
+                JSON.parse('{\"type\":\"pick-date\",\"value\":\"{d_str}\"}'),
                 '*'
               );
             ">
@@ -273,5 +273,6 @@ if st.session_state.get("clicked_date"):
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
+
 
 
