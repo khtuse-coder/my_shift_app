@@ -27,7 +27,7 @@ def get_encryption_key(password: str):
 # ===============================
 # 2. Page / Session
 # ===============================
-st.set_page_config(page_title="二休二人力看板", layout="centered")
+st.set_page_config(page_title="二休二排班助手", layout="centered")
 st.title("🔋 二休二排班助手")
 
 if "clicked_date" not in st.session_state:
@@ -59,7 +59,12 @@ with st.container(border=True):
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
     try:
-        r = supabase.table("private_notes").select("date").eq("owner", current_user).execute()
+        r = (
+            supabase.table("private_notes")
+            .select("date")
+            .eq("owner", current_user)
+            .execute()
+        )
         my_noted_dates = {i["date"] for i in (r.data or [])}
     except Exception:
         pass
@@ -100,7 +105,7 @@ cal = calendar.Calendar(firstweekday=6)
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. Calendar HTML (iframe-safe)
+# 7. Calendar HTML（固定 7 欄）
 # ===============================
 weekdays = ["日", "一", "二", "三", "四", "五", "六"]
 today = date.today()
@@ -195,29 +200,22 @@ html, body {{
 </html>
 """
 
+# ⭐⭐⭐ 這一行是你之前少掉的關鍵 ⭐⭐⭐
 components.html(
-    "<script>"
-    "window.addEventListener('message', (event) => {"
-    "  if (event.data && event.data.type === 'pick-date') {"
-    "    fetch('/_stcore/stream', {"
-    "      method: 'POST',"
-    "      headers: { 'Content-Type': 'application/json' },"
-    "      body: JSON.stringify({ clicked_date: event.data.value })"
-    "    });"
-    "  }"
-    "});"
-    "</script>",
-    height=0
+    html,
+    height=520,
+    scrolling=False
 )
+
 # ===============================
-# 8. Query param
+# 8. Read query param
 # ===============================
 clicked = None
 try:
     clicked = st.query_params.get("d")
 except Exception:
     try:
-        clicked = st.experimental_get_query_params().get("d",[None])[0]
+        clicked = st.experimental_get_query_params().get("d", [None])[0]
     except Exception:
         pass
 
@@ -234,7 +232,13 @@ def show_note_editor(target_date, user, pwd):
 
     try:
         f = get_encryption_key(pwd)
-        r = supabase.table("private_notes").select("content").eq("date", target_date).eq("owner", user).execute()
+        r = (
+            supabase.table("private_notes")
+            .select("content")
+            .eq("date", target_date)
+            .eq("owner", user)
+            .execute()
+        )
         if r.data:
             content = f.decrypt(r.data[0]["content"].encode()).decode()
     except Exception:
@@ -244,11 +248,11 @@ def show_note_editor(target_date, user, pwd):
 
     if st.button("🔒 安全加密儲存", use_container_width=True):
         token = get_encryption_key(pwd).encrypt(txt.encode()).decode()
-        supabase.table("private_notes").upsert({
-            "date": target_date,
-            "owner": user,
-            "content": token
-        }).execute()
+        (
+            supabase.table("private_notes")
+            .upsert({"date": target_date, "owner": user, "content": token})
+            .execute()
+        )
 
         st.session_state.clicked_date = None
         try:
@@ -264,11 +268,11 @@ def show_note_editor(target_date, user, pwd):
 # ===============================
 if st.session_state.get("clicked_date"):
     if current_user != "請選擇" and user_pwd:
-        show_note_editor(st.session_state.clicked_date, current_user, user_pwd)
+        show_note_editor(
+            st.session_state.clicked_date,
+            current_user,
+            user_pwd,
+        )
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
-
-
-
-
