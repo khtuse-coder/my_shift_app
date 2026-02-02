@@ -30,8 +30,6 @@ def get_encryption_key(password: str):
 st.set_page_config(page_title="二休二排班助手", layout="centered")
 st.title("🔋 二休二排班助手")
 
-if "clicked_date" not in st.session_state:
-    st.session_state.clicked_date = None
 if "year" not in st.session_state:
     st.session_state.year = date.today().year
 if "month" not in st.session_state:
@@ -54,20 +52,17 @@ with st.container(border=True):
     st.caption("⚠️ 密碼僅用於本地加密，系統無法復原")
 
 # ===============================
-# 4. Noted Dates
+# 4. Noted Dates（只為了📍）
 # ===============================
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
-    try:
-        r = (
-            supabase.table("private_notes")
-            .select("date")
-            .eq("owner", current_user)
-            .execute()
-        )
-        my_noted_dates = {i["date"] for i in (r.data or [])}
-    except Exception:
-        my_noted_dates = set()
+    r = (
+        supabase.table("private_notes")
+        .select("date")
+        .eq("owner", current_user)
+        .execute()
+    )
+    my_noted_dates = {i["date"] for i in (r.data or [])}
 
 # ===============================
 # 5. Month Switch
@@ -83,7 +78,7 @@ if c1.button("◀️"):
 
 with c2:
     st.markdown(
-        f"<h3 style='text-align:center;margin:0.4rem 0'>{st.session_state.year} 年 {st.session_state.month} 月</h3>",
+        f"<h3 style='text-align:center'>{st.session_state.year} 年 {st.session_state.month} 月</h3>",
         unsafe_allow_html=True,
     )
 
@@ -101,12 +96,11 @@ def get_shift(d: date):
     base = date(2026, 1, 30)
     return "AC" if (d - base).days % 4 in (0, 1) else "BD"
 
-cal = calendar.Calendar(firstweekday=6)  # Sunday
+cal = calendar.Calendar(firstweekday=6)
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. Calendar HTML（固定 7 欄）
-#    ✅ 修正：不用 JS onclick，改用 <a href="?d=..."> 最穩
+# 7. Calendar HTML（純顯示）
 # ===============================
 weekdays = ["日", "一", "二", "三", "四", "五", "六"]
 today = date.today()
@@ -129,170 +123,102 @@ for week in weeks:
 
         mark = "📍" if has_note else ""
 
-        # out-of-month 不給點（避免跳錯）
-        if is_curr:
-            cells_html += f"""
-            <a class="{cls}" href="?d={d_str}" target="_top" style="background:{bg}">
-              <div class="day">{d.day}</div>
-              <div class="shift">{team}</div>
-              <div class="note">{mark}</div>
-            </a>
-            """
-        else:
-            cells_html += f"""
-            <div class="{cls}" style="background:#1f2937">
-              <div class="day">{d.day}</div>
-              <div class="shift">{team}</div>
-              <div class="note"></div>
-            </div>
-            """
+        cells_html += f"""
+        <div class="{cls}" style="background:{bg if is_curr else '#1f2937'}">
+          <div class="day">{d.day}</div>
+          <div class="shift">{team}</div>
+          <div class="note">{mark}</div>
+        </div>
+        """
 
 html = f"""
-<!DOCTYPE html>
-<html>
-<head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-html, body {{
-  margin:0;
-  padding:0;
-  background:#0b0f19;
-}}
-.wrapper {{
-  max-width:760px;
-  margin:0 auto;
-  padding:12px;
-}}
-.grid {{
-  display:grid;
-  grid-template-columns:repeat(7,1fr);
-  gap:6px;
-}}
-.dow {{
-  text-align:center;
-  font-weight:700;
-  color:#ffffff;
-  padding:6px 0;
-}}
-.cell {{
-  height:60px;
-  border-radius:10px;
-  text-align:center;
-  padding:6px 4px;
-  color:#111111;
-  cursor:pointer;
-  text-decoration:none;
-  display:block;
-}}
-.cell:hover {{
-  filter:brightness(0.98);
-}}
-.cell.out {{
-  background:#1f2937 !important;
-  color:#9ca3af;
-  cursor:default;
-}}
-.cell.today {{
-  outline:2px solid #ef4444;
-  outline-offset:-2px;
-}}
-.day {{ font-size:14px; font-weight:800; }}
+.grid {{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }}
+.dow {{ text-align:center; font-weight:700; color:white; }}
+.cell {{ height:60px; border-radius:10px; padding:6px; text-align:center; }}
+.cell.out {{ color:#9ca3af; }}
+.cell.today {{ outline:2px solid #ef4444; }}
+.day {{ font-weight:800; }}
 .shift {{ font-size:11px; }}
 .note {{ font-size:11px; }}
-
-@media(max-width:420px){{
-  .cell{{height:56px;}}
-  .day{{font-size:13px;}}
-}}
 </style>
-</head>
-<body>
-<div class="wrapper">
-  <div class="grid">
-    {''.join([f"<div class='dow'>{w}</div>" for w in weekdays])}
-    {cells_html}
-  </div>
+<div class="grid">
+{''.join([f"<div class='dow'>{w}</div>" for w in weekdays])}
+{cells_html}
 </div>
-</body>
-</html>
 """
 
-# 高度依週數調整：避免你那種「擠在一起 / 露白 / 截斷」
-# 週數一般是 5 或 6
-cal_height = 120 + (len(weeks) * 70)
+components.html(html, height=120 + len(weeks) * 70)
 
-components.html(
-    html,
-    height=cal_height,
-    scrolling=False
+# ===============================
+# 8. 日期選擇 + 編輯備註
+# ===============================
+st.divider()
+st.subheader("🗓 選擇日期")
+
+selected_date = st.date_input(
+    "請選擇要編輯的日期",
+    value=date(st.session_state.year, st.session_state.month, 1),
 )
 
-# ===============================
-# 8. Read query param
-# ===============================
-clicked = None
-try:
-    clicked = st.query_params.get("d")
-except Exception:
-    try:
-        clicked = st.experimental_get_query_params().get("d", [None])[0]
-    except Exception:
-        clicked = None
-
-if clicked:
-    st.session_state.clicked_date = clicked
-
-# ===============================
-# 9. Note Dialog
-# ===============================
-@st.dialog("📋 專屬加密備註")
-def show_note_editor(target_date, user, pwd):
-    st.write(f"📅 日期：{target_date}")
-    content = ""
-
-    try:
-        f = get_encryption_key(pwd)
-        r = (
-            supabase.table("private_notes")
-            .select("content")
-            .eq("date", target_date)
-            .eq("owner", user)
-            .execute()
-        )
-        if r.data:
-            content = f.decrypt(r.data[0]["content"].encode()).decode()
-    except Exception:
-        st.warning("⚠️ 無法解密或尚無備註")
-
-    txt = st.text_area("備註內容", value=content, height=160)
-
-    if st.button("🔒 安全加密儲存", use_container_width=True):
-        token = get_encryption_key(pwd).encrypt(txt.encode()).decode()
-        (
-            supabase.table("private_notes")
-            .upsert({"date": target_date, "owner": user, "content": token})
-            .execute()
-        )
-
-        st.session_state.clicked_date = None
+note_text = ""
+if current_user != "請選擇" and user_pwd:
+    f = get_encryption_key(user_pwd)
+    r = (
+        supabase.table("private_notes")
+        .select("content")
+        .eq("owner", current_user)
+        .eq("date", str(selected_date))
+        .execute()
+    )
+    if r.data:
         try:
-            st.query_params.pop("d", None)
+            note_text = f.decrypt(r.data[0]["content"].encode()).decode()
         except Exception:
-            pass
+            note_text = ""
 
-        st.success("✅ 已儲存")
-        st.rerun()
+txt = st.text_area("📝 備註內容", value=note_text, height=160)
+
+if st.button("🔒 安全加密儲存"):
+    token = get_encryption_key(user_pwd).encrypt(txt.encode()).decode()
+    (
+        supabase.table("private_notes")
+        .upsert({
+            "date": str(selected_date),
+            "owner": current_user,
+            "content": token,
+        })
+        .execute()
+    )
+    st.success("✅ 已儲存")
+    st.rerun()
 
 # ===============================
-# 10. Trigger Dialog
+# 9. 本月備註清單
 # ===============================
-if st.session_state.get("clicked_date"):
-    if current_user != "請選擇" and user_pwd:
-        show_note_editor(
-            st.session_state.clicked_date,
-            current_user,
-            user_pwd,
-        )
+st.divider()
+st.subheader("📚 本月備註")
+
+month_prefix = f"{st.session_state.year}-{st.session_state.month:02d}"
+
+if current_user != "請選擇" and user_pwd:
+    r = (
+        supabase.table("private_notes")
+        .select("date, content")
+        .eq("owner", current_user)
+        .like("date", f"{month_prefix}%")
+        .order("date")
+        .execute()
+    )
+
+    if not r.data:
+        st.caption("（本月尚無備註）")
     else:
-        st.warning("❌ 請先選擇人員並輸入金鑰")
-        st.session_state.clicked_date = None
+        f = get_encryption_key(user_pwd)
+        for row in r.data:
+            d = row["date"][5:]
+            try:
+                text = f.decrypt(row["content"].encode()).decode()
+            except Exception:
+                text = "⚠️ 無法解密"
+            st.markdown(f"**{d}**　{text}")
