@@ -16,13 +16,13 @@ def get_encryption_key(password: str):
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b'smt_safety_salt_fixed', iterations=100000)
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode())))
 
-# --- 2. 核心 CSS 修復：偽裝按鈕為漂亮網格格子 ---
+# --- 2. 核心造型恢復：魔改原生按鈕為漂亮網格 ---
 st.set_page_config(page_title="二休二人力看板", layout="centered")
 st.markdown("""
     <style>
-    /* 讓 Streamlit 按鈕變成寬大的格子造型 */
+    /* 讓 Streamlit 按鈕變成寬大的方形格子 */
     div.stButton > button {
-        height: 80px; width: 100%; border-radius: 0px; border: 1px solid #cbd5e0 !important;
+        height: 85px; width: 100%; border-radius: 0px; border: 1px solid #cbd5e0 !important;
         margin: 0px; padding: 5px; font-weight: bold; line-height: 1.2;
     }
     /* 移除格子之間的間隙，保持整齊網格 */
@@ -43,12 +43,11 @@ except: staff_list = []
 
 with st.container(border=True):
     c_user, c_pwd = st.columns(2)
-    # 使用 key 讓 Streamlit 自動緩存你的輸入，不需要每次點擊都重打
-    current_user = c_user.selectbox("👤 選擇姓名", ["請選擇"] + staff_list, key="my_user_login")
-    user_pwd = c_pwd.text_input("🔑 輸入金鑰", type="password", key="my_pwd_login")
-    st.info("⚠️ 密碼設定後不可修改，系統不記錄，請務必記牢。")
+    current_user = c_user.selectbox("👤 選擇姓名", ["請選擇"] + staff_list, key="persist_user")
+    user_pwd = c_pwd.text_input("🔑 輸入金鑰", type="password", key="persist_pwd")
+    st.info("⚠️ 密碼不記錄，請務必記牢，否則資料無法救援。")
 
-# --- 4. 月份切換邏輯 ---
+# --- 4. 月份切換 ---
 if 'sel_year' not in st.session_state: st.session_state.sel_year = date.today().year
 if 'sel_month' not in st.session_state: st.session_state.sel_month = date.today().month
 
@@ -63,11 +62,10 @@ if m3.button("▶️"):
     if st.session_state.sel_month == 1: st.session_state.sel_year += 1
     st.rerun()
 
-# --- 5. 抓取專屬標記 ---
+# --- 5. 抓取標記 ---
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
     try:
-        # 只抓取 owner 等於當前登入者的日期標記
         res_n = supabase.table("private_notes").select("date").eq("owner", current_user).execute()
         my_noted_dates = {item['date'] for item in res_n.data}
     except: pass
@@ -76,7 +74,6 @@ if current_user != "請選擇" and user_pwd:
 def get_shift_info(target_date):
     base_date = date(2026, 1, 30)
     rem = (target_date - base_date).days % 4
-    # AC班=綠色(#D4EDDA), BD班=橘色(#FFF3CD)
     return ("AC", "#D4EDDA", "#155724") if rem in [0, 1] else ("BD", "#FFF3CD", "#856404")
 
 @st.dialog("📝 加密備註編輯器")
@@ -90,7 +87,7 @@ def show_note_editor(target_date, user, pwd):
             content = f.decrypt(res.data[0]['content'].encode()).decode()
     except: st.warning("目前無紀錄或解密失敗。")
     
-    new_text = st.text_area("備註內容 (加密儲存)", value=content, height=180)
+    new_text = st.text_area("備註內容", value=content, height=180)
     if st.button("🔒 儲存加密內容", use_container_width=True):
         token = get_encryption_key(pwd).encrypt(new_text.encode()).decode()
         supabase.table("private_notes").upsert({"date": str(target_date), "owner": user, "content": token}).execute()
@@ -102,7 +99,7 @@ h_cols = st.columns(7)
 for i, day_name in enumerate(["日", "一", "二", "三", "四", "五", "六"]):
     h_cols[i].markdown(f"<div class='weekday-header'>{day_name}</div>", unsafe_allow_html=True)
 
-# 顯示網格 (恢復原本配色並加入點擊功能)
+# 顯示網格 (恢復原本配色)
 cal_obj = calendar.Calendar(firstweekday=6)
 weeks = cal_obj.monthdatescalendar(st.session_state.sel_year, st.session_state.sel_month)
 
@@ -118,11 +115,10 @@ for week in weeks:
         # 關鍵：利用 CSS 注入，讓每一格按鈕擁有獨立的背景顏色
         st.markdown(f"<style>button[key='btn_{d_str}'] {{ background-color: {bg if is_curr else '#ffffff'} !important; color: {txt if is_curr else '#ccc'} !important; border: {'1px solid #cbd5e0' if is_curr else 'none'} !important; }}</style>", unsafe_allow_html=True)
         
-        # 使用 st.button 取代 <a> 連結，點擊直接觸發 dialog，不會重新整理
         if cols[i].button(btn_label, key=f"btn_{d_str}"):
             if is_curr:
                 if current_user == "請選擇" or not user_pwd:
-                    st.error("❌ 請先在上方登入區輸入姓名與金鑰")
+                    st.error("❌ 請先在上方登入區選取姓名並輸入金鑰")
                 else:
                     show_note_editor(d, current_user, user_pwd)
 
