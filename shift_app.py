@@ -42,7 +42,7 @@ if "month" not in st.session_state:
 # ===============================
 try:
     res = supabase.table("staff_list").select("name").execute()
-    staff_list = [i["name"] for i in res.data]
+    staff_list = [i["name"] for i in (res.data or [])]
 except Exception:
     staff_list = []
 
@@ -67,7 +67,7 @@ if current_user != "請選擇" and user_pwd:
         )
         my_noted_dates = {i["date"] for i in (r.data or [])}
     except Exception:
-        pass
+        my_noted_dates = set()
 
 # ===============================
 # 5. Month Switch
@@ -101,11 +101,12 @@ def get_shift(d: date):
     base = date(2026, 1, 30)
     return "AC" if (d - base).days % 4 in (0, 1) else "BD"
 
-cal = calendar.Calendar(firstweekday=6)
+cal = calendar.Calendar(firstweekday=6)  # Sunday
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
 # 7. Calendar HTML（固定 7 欄）
+#    ✅ 修正：不用 JS onclick，改用 <a href="?d=..."> 最穩
 # ===============================
 weekdays = ["日", "一", "二", "三", "四", "五", "六"]
 today = date.today()
@@ -128,14 +129,23 @@ for week in weeks:
 
         mark = "📍" if has_note else ""
 
-        cells_html += f"""
-        <div class="{cls}" style="background:{bg}"
-             onclick="window.top.location.search='?d={d_str}'"
-          <div class="day">{d.day}</div>
-          <div class="shift">{team}</div>
-          <div class="note">{mark}</div>
-        </div>
-        """
+        # out-of-month 不給點（避免跳錯）
+        if is_curr:
+            cells_html += f"""
+            <a class="{cls}" href="?d={d_str}" target="_top" style="background:{bg}">
+              <div class="day">{d.day}</div>
+              <div class="shift">{team}</div>
+              <div class="note">{mark}</div>
+            </a>
+            """
+        else:
+            cells_html += f"""
+            <div class="{cls}" style="background:#1f2937">
+              <div class="day">{d.day}</div>
+              <div class="shift">{team}</div>
+              <div class="note"></div>
+            </div>
+            """
 
 html = f"""
 <!DOCTYPE html>
@@ -162,6 +172,7 @@ html, body {{
   text-align:center;
   font-weight:700;
   color:#ffffff;
+  padding:6px 0;
 }}
 .cell {{
   height:60px;
@@ -170,10 +181,16 @@ html, body {{
   padding:6px 4px;
   color:#111111;
   cursor:pointer;
+  text-decoration:none;
+  display:block;
+}}
+.cell:hover {{
+  filter:brightness(0.98);
 }}
 .cell.out {{
   background:#1f2937 !important;
   color:#9ca3af;
+  cursor:default;
 }}
 .cell.today {{
   outline:2px solid #ef4444;
@@ -200,10 +217,13 @@ html, body {{
 </html>
 """
 
-# ⭐⭐⭐ 這一行是你之前少掉的關鍵 ⭐⭐⭐
+# 高度依週數調整：避免你那種「擠在一起 / 露白 / 截斷」
+# 週數一般是 5 或 6
+cal_height = 120 + (len(weeks) * 70)
+
 components.html(
     html,
-    height=520,
+    height=cal_height,
     scrolling=False
 )
 
@@ -217,7 +237,7 @@ except Exception:
     try:
         clicked = st.experimental_get_query_params().get("d", [None])[0]
     except Exception:
-        pass
+        clicked = None
 
 if clicked:
     st.session_state.clicked_date = clicked
@@ -276,5 +296,3 @@ if st.session_state.get("clicked_date"):
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
-
-
