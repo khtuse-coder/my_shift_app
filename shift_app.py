@@ -1,3 +1,4 @@
+import streamlit.components.v1 as components
 import streamlit as st
 from datetime import date
 import calendar
@@ -250,7 +251,11 @@ for week in weeks:
         """
 
 html += "</div></div>"
-st.markdown(html, unsafe_allow_html=True)
+components.html(
+    html,
+    height=520,   # 手機一頁顯示整個月
+    scrolling=False
+)
 
 # ===============================
 # 9. 讀取 query param → 觸發 dialog
@@ -334,3 +339,4 @@ if st.session_state.get("clicked_date"):
                 st.experimental_set_query_params()
             except Exception:
                 pass
+
