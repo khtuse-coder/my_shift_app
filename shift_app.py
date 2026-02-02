@@ -1,39 +1,50 @@
 import streamlit as st
 from datetime import date
 import calendar
+import base64
 from supabase import create_client
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 # --- 1. 雲端連線設定 ---
 SUPABASE_URL = st.secrets["SUPABASE_URL"]
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- 2. 國定假日設定 (包含 2026 與 2027) ---
-# 這樣你明年也不用改程式了
+# --- 2. 加密工具函式 ---
+def get_encryption_key(password: str):
+    """將使用者密碼轉為加密金鑰"""
+    password_bytes = password.encode()
+    salt = b'smt_safety_salt_2026' # 固定鹽值
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100000,
+    )
+    key = base64.urlsafe_b64encode(kdf.derive(password_bytes))
+    return Fernet(key)
+
+# --- 3. 國定假日設定 ---
 HOLIDAYS = {
-    # 2026 年
     date(2026, 1, 1): "元旦", date(2026, 2, 16): "除夕", date(2026, 2, 17): "春節",
     date(2026, 2, 18): "春節", date(2026, 2, 19): "春節", date(2026, 2, 20): "春節",
     date(2026, 2, 28): "228紀念", date(2026, 4, 4): "兒童/清明", date(2026, 4, 5): "清明節",
     date(2026, 5, 1): "勞動節", date(2026, 6, 19): "端午節", date(2026, 9, 25): "中秋節",
-    date(2026, 10, 10): "國慶日",
-    # 2027 年 (預估)
-    date(2027, 1, 1): "元旦", date(2027, 2, 6): "除夕", date(2027, 2, 7): "春節",
-    date(2027, 2, 8): "春節", date(2027, 2, 9): "春節", date(2027, 2, 28): "228紀念",
-    date(2027, 4, 4): "兒童節", date(2027, 4, 5): "清明節", date(2027, 5, 1): "勞動節",
-    date(2027, 6, 9): "端午節", date(2027, 9, 15): "中秋節", date(2027, 10, 10): "國慶日"
+    date(2026, 10, 10): "國慶日"
 }
 
-# --- 3. 核心邏輯：計算當班組別 ---
+# --- 4. 核心邏輯：計算當班組別 ---
 def get_shift_info(target_date):
-    base_date = date(2026, 1, 30) # 基準日
+    base_date = date(2026, 1, 30) 
     remainder = (target_date - base_date).days % 4
     if remainder in [0, 1]:
         return "AC", "#D4EDDA", "#155724" # 綠色
     else:
         return "BD", "#FFF3CD", "#856404" # 橘色
 
-# --- 4. 網頁設定與 CSS ---
+# --- 5. 網頁設定與 CSS ---
 st.set_page_config(page_title="二休二人力看板", layout="centered")
 st.markdown("""
     <style>
@@ -48,7 +59,7 @@ st.markdown("""
 
 st.title("🔋 二休二排班助手")
 
-# --- 5. 月份切換 ---
+# --- 6. 月份切換邏輯 ---
 if 'sel_year' not in st.session_state: st.session_state.sel_year = date.today().year
 if 'sel_month' not in st.session_state: st.session_state.sel_month = date.today().month
 
@@ -68,7 +79,7 @@ if col3.button("▶️"):
     else: st.session_state.sel_month += 1
     st.rerun()
 
-# --- 6. 月曆 HTML ---
+# --- 7. 生成月曆 ---
 cal_obj = calendar.Calendar(firstweekday=6)
 month_days = cal_obj.monthdatescalendar(st.session_state.sel_year, st.session_state.sel_month)
 
@@ -93,16 +104,19 @@ st.markdown(html_cal, unsafe_allow_html=True)
 
 st.divider()
 
-# --- 7. 當日名單與管理 ---
+# --- 8. 當日名單查詢 ---
 st.subheader("👥 當日值班名單")
-pick_date = st.date_input("查詢具體日期", date.today())
+pick_date = st.date_input("選擇日期查詢名單或紀錄", date.today())
 team_type, _, _ = get_shift_info(pick_date)
 on_duty_teams = ['A', 'C'] if team_type == "AC" else ['B', 'D']
 
+# 嘗試讀取人員名單
+staff_names = []
 try:
     res = supabase.table("staff_list").select("*").execute()
     all_staff = res.data
     if all_staff:
+        staff_names = [s['name'] for s in all_staff]
         on_duty_staff = [s for s in all_staff if s['team'] in on_duty_teams]
         c1, c2 = st.columns(2)
         with c1:
@@ -111,16 +125,84 @@ try:
         with c2:
             st.write("🌙 夜班")
             for s in [p for p in on_duty_staff if p['shift_type'] == "夜班"]: st.info(f"👤 {s['name']}")
-except: pass
+except:
+    st.warning("目前尚無人員資料")
 
-with st.expander("🛠️ 人員與備註管理"):
+# --- 9. 個人私密加密日誌 (彈出視窗) ---
+@st.dialog("🔒 個人加密備註")
+def show_private_note_dialog(target_date):
+    st.write(f"📅 日期：{target_date}")
+    
+    # 讓同事選人並輸密碼
+    c1, c2 = st.columns(2)
+    user = c1.selectbox("你是誰？", staff_names if staff_names else ["請先新增人員"])
+    pwd = c2.text_input("輸入解鎖金鑰", type="password", help="忘記金鑰資料將永遠無法找回！")
+
+    if pwd:
+        # 嘗試解密現有資料
+        decrypted_content = ""
+        try:
+            f = get_encryption_key(pwd)
+            res = supabase.table("private_notes").select("content").eq("date", target_date).eq("owner", user).execute()
+            if res.data:
+                encrypted_data = res.data[0]['content']
+                decrypted_content = f.decrypt(encrypted_data.encode()).decode()
+        except:
+            st.warning("⚠️ 金鑰無法解密此日期資料。可能是密碼錯誤或當日無紀錄。")
+
+        note_text = st.text_area("備註內容 (只有你知道密碼，雲端存的是亂碼)", value=decrypted_content, height=150)
+        
+        if st.button("加密儲存"):
+            try:
+                f = get_encryption_key(pwd)
+                encrypted_token = f.encrypt(note_text.encode()).decode()
+                supabase.table("private_notes").upsert({
+                    "date": str(target_date),
+                    "owner": user,
+                    "content": encrypted_token
+                }).execute()
+                st.success("✅ 資料已成功加密並存入雲端！")
+                st.rerun()
+            except Exception as e:
+                st.error(f"儲存失敗: {e}")
+    else:
+        st.write("請輸入金鑰以解鎖紀錄。")
+
+st.write("---")
+if st.button(f"📝 進入 {pick_date} 的加密私密日誌", use_container_width=True):
+    show_private_note_dialog(pick_date)
+
+# --- 10. 人員管理 (Expander) ---
+with st.expander("🛠️ 人員名單管理"):
     n_name = st.text_input("新增姓名")
     c_a, c_b = st.columns(2)
     n_team = c_a.selectbox("組別", ["A", "B", "C", "D"])
     n_type = c_b.selectbox("時段", ["日班", "夜班"])
-    if st.button("➕ 加入"):
+    if st.button("➕ 加入名單"):
         supabase.table("staff_list").insert({"name":n_name, "team":n_team, "shift_type":n_type}).execute()
         st.rerun()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
