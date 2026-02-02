@@ -200,22 +200,19 @@ html, body {{
 </html>
 """
 
-components.html(html, height=620, scrolling=False)
-<script>
-window.addEventListener("message", (event) => {
-  if (event.data && event.data.type === "pick-date") {
-    fetch("/_stcore/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        clicked_date: event.data.value
-      })
-    });
-  }
-});
-</script>
-""",
-    height=0,
+components.html(
+    "<script>"
+    "window.addEventListener('message', (event) => {"
+    "  if (event.data && event.data.type === 'pick-date') {"
+    "    fetch('/_stcore/stream', {"
+    "      method: 'POST',"
+    "      headers: { 'Content-Type': 'application/json' },"
+    "      body: JSON.stringify({ clicked_date: event.data.value })"
+    "    });"
+    "  }"
+    "});"
+    "</script>",
+    height=0
 )
 # ===============================
 # 8. Query param
@@ -276,4 +273,5 @@ if st.session_state.get("clicked_date"):
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
+
 
