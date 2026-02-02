@@ -125,12 +125,7 @@ for week in weeks:
 
         cells_html += f"""
         <div class="{cls}" style="background:{bg}"
-             onclick="
-              window.parent.postMessage(
-                JSON.parse('{\"type\":\"pick-date\",\"value\":\"{d_str}\"}'),
-                '*'
-              );
-            ">
+             onclick="window.location.search='?d={d_str}'">
           <div class="day">{d.day}</div>
           <div class="shift">{team}</div>
           <div class="note">{mark}</div>
@@ -273,6 +268,7 @@ if st.session_state.get("clicked_date"):
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
+
 
 
 
