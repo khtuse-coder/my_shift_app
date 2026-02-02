@@ -1,5 +1,5 @@
-import streamlit.components.v1 as components
 import streamlit as st
+import streamlit.components.v1 as components
 from datetime import date
 import calendar
 import base64
@@ -78,7 +78,7 @@ if c1.button("◀️"):
 
 with c2:
     st.markdown(
-        f"<h3 style='text-align:center;margin:0.3rem 0;'>{st.session_state.year} 年 {st.session_state.month} 月</h3>",
+        f"<h3 style='text-align:center;margin:0.4rem 0'>{st.session_state.year} 年 {st.session_state.month} 月</h3>",
         unsafe_allow_html=True,
     )
 
@@ -100,79 +100,13 @@ cal = calendar.Calendar(firstweekday=6)
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. CSS（穩定可讀版）
+# 7. Calendar HTML (iframe-safe)
 # ===============================
-st.markdown("""
-<style>
-.block-container { padding-top: 1.2rem; padding-bottom: 1.2rem; }
-
-.cal-wrap{
-  max-width: 760px;
-  margin: 0 auto;
-  background:#0b0f19;
-  padding:12px;
-  border-radius:16px;
-}
-
-.cal-grid{
-  display:grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap:6px;
-}
-
-.cal-dow{
-  text-align:center;
-  font-weight:700;
-  color:#ffffff;
-  padding:4px 0;
-}
-
-.cal-cell{
-  background: var(--bg);
-  border-radius:10px;
-  padding:6px 4px;
-  height:60px;
-  text-align:center;
-  cursor:pointer;
-  color:#111111;
-  box-shadow:0 4px 10px rgba(0,0,0,.25);
-}
-
-.cal-out{
-  background:#1f2937 !important;
-  color:#9ca3af !important;
-}
-
-.cal-today{
-  outline:2px solid #ef4444;
-  outline-offset:-2px;
-}
-
-.cal-day{ font-weight:800; font-size:14px; }
-.cal-shift{ font-size:11px; margin-top:2px; }
-.cal-note{ font-size:11px; margin-top:2px; }
-
-@media (max-width:420px){
-  .cal-cell{ height:56px; }
-  .cal-day{ font-size:13px; }
-  .cal-shift{ font-size:10px; }
-}
-</style>
-""", unsafe_allow_html=True)
-
-# ===============================
-# 8. Calendar UI
-# ===============================
-st.markdown("#### 📆 點選日期新增 / 查看備註")
-
-weekdays = ["日","一","二","三","四","五","六"]
-
-html = "<div class='cal-wrap'><div class='cal-grid'>"
-html += "".join([f"<div class='cal-dow'>{w}</div>" for w in weekdays])
-
+weekdays = ["日", "一", "二", "三", "四", "五", "六"]
 today = date.today()
 cur_month = st.session_state.month
 
+cells_html = ""
 for week in weeks:
     for d in week:
         d_str = str(d)
@@ -181,33 +115,94 @@ for week in weeks:
         has_note = d_str in my_noted_dates
 
         bg = "#d1fae5" if team == "AC" else "#fef3c7"
-        cls = "cal-cell"
+        cls = "cell"
         if not is_curr:
-            cls += " cal-out"
+            cls += " out"
         if d == today:
-            cls += " cal-today"
+            cls += " today"
 
         mark = "📍" if has_note else ""
 
-        html += f"""
-        <div class="{cls}" style="--bg:{bg}"
+        cells_html += f"""
+        <div class="{cls}" style="background:{bg}"
              onclick="
                const u = new URL(window.location.href);
                u.searchParams.set('d','{d_str}');
                window.location.href = u.toString();
              ">
-          <div class="cal-day">{d.day}</div>
-          <div class="cal-shift">{team}</div>
-          <div class="cal-note">{mark}</div>
+          <div class="day">{d.day}</div>
+          <div class="shift">{team}</div>
+          <div class="note">{mark}</div>
         </div>
         """
 
-html += "</div></div>"
+html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+html, body {{
+  margin:0;
+  padding:0;
+  background:#0b0f19;
+}}
+.wrapper {{
+  max-width:760px;
+  margin:0 auto;
+  padding:12px;
+}}
+.grid {{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:6px;
+}}
+.dow {{
+  text-align:center;
+  font-weight:700;
+  color:#ffffff;
+}}
+.cell {{
+  height:60px;
+  border-radius:10px;
+  text-align:center;
+  padding:6px 4px;
+  color:#111111;
+  cursor:pointer;
+}}
+.cell.out {{
+  background:#1f2937 !important;
+  color:#9ca3af;
+}}
+.cell.today {{
+  outline:2px solid #ef4444;
+  outline-offset:-2px;
+}}
+.day {{ font-size:14px; font-weight:800; }}
+.shift {{ font-size:11px; }}
+.note {{ font-size:11px; }}
 
-components.html(html, height=520, scrolling=False)
+@media(max-width:420px){{
+  .cell{{height:56px;}}
+  .day{{font-size:13px;}}
+}}
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="grid">
+    {''.join([f"<div class='dow'>{w}</div>" for w in weekdays])}
+    {cells_html}
+  </div>
+</div>
+</body>
+</html>
+"""
+
+components.html(html, height=620, scrolling=False)
 
 # ===============================
-# 9. Query param → dialog
+# 8. Query param
 # ===============================
 clicked = None
 try:
@@ -222,7 +217,7 @@ if clicked:
     st.session_state.clicked_date = clicked
 
 # ===============================
-# 10. Note Dialog
+# 9. Note Dialog
 # ===============================
 @st.dialog("📋 專屬加密備註")
 def show_note_editor(target_date, user, pwd):
@@ -257,7 +252,7 @@ def show_note_editor(target_date, user, pwd):
         st.rerun()
 
 # ===============================
-# 11. Trigger Dialog
+# 10. Trigger Dialog
 # ===============================
 if st.session_state.get("clicked_date"):
     if current_user != "請選擇" and user_pwd:
