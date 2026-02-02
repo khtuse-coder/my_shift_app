@@ -52,7 +52,7 @@ with st.container(border=True):
     st.caption("⚠️ 密碼僅用於本地加密，系統無法復原")
 
 # ===============================
-# 4. Noted Dates（只為了📍）
+# 4. Noted Dates（📍 用）
 # ===============================
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
@@ -100,7 +100,7 @@ cal = calendar.Calendar(firstweekday=6)
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. Calendar HTML（純顯示）
+# 7. Calendar（純顯示）
 # ===============================
 weekdays = ["日", "一", "二", "三", "四", "五", "六"]
 today = date.today()
@@ -151,7 +151,7 @@ html = f"""
 components.html(html, height=120 + len(weeks) * 70)
 
 # ===============================
-# 8. 日期選擇 + 編輯備註
+# 8. 日期選擇 + 備註編輯
 # ===============================
 st.divider()
 st.subheader("🗓 選擇日期")
@@ -194,19 +194,24 @@ if st.button("🔒 安全加密儲存"):
     st.rerun()
 
 # ===============================
-# 9. 本月備註清單
+# 9. 本月備註（✅ 已修正）
 # ===============================
 st.divider()
 st.subheader("📚 本月備註")
 
-month_prefix = f"{st.session_state.year}-{st.session_state.month:02d}"
-
 if current_user != "請選擇" and user_pwd:
+    month_start = date(st.session_state.year, st.session_state.month, 1)
+    if st.session_state.month == 12:
+        next_month_start = date(st.session_state.year + 1, 1, 1)
+    else:
+        next_month_start = date(st.session_state.year, st.session_state.month + 1, 1)
+
     r = (
         supabase.table("private_notes")
         .select("date, content")
         .eq("owner", current_user)
-        .like("date", f"{month_prefix}%")
+        .gte("date", str(month_start))
+        .lt("date", str(next_month_start))
         .order("date")
         .execute()
     )
