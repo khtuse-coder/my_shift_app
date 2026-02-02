@@ -16,27 +16,37 @@ def get_encryption_key(password: str):
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=b'smt_safety_salt_fixed', iterations=100000)
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode())))
 
-# --- 2. 造型重塑：魔改按鈕為寬大網格 ---
+# --- 2. 造型大翻修：恢復漂亮大網格 ---
 st.set_page_config(page_title="二休二人力看板", layout="centered")
 st.markdown("""
     <style>
-    /* 核心造型：讓按鈕變成 85px 高的方形網格 */
-    div.stButton > button {
-        height: 85px; width: 100%; border-radius: 0px; 
-        border: 1px solid #cbd5e0 !important;
-        margin: 0px; padding: 5px; font-weight: bold; line-height: 1.2;
+    /* 建立漂亮的日曆表格造型 */
+    .cal-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 20px; }
+    .cal-table th { background-color: #f8fafc; color: #1e293b; text-align: center; padding: 10px 2px; border: 1px solid #cbd5e0; }
+    .cal-table td { border: 1px solid #cbd5e0; text-align: center; padding: 0; height: 90px; position: relative; }
+    
+    /* 關鍵：讓按鈕透明並覆蓋整個格子，解決變難看的問題 */
+    .stButton > button {
+        background: transparent !important;
+        border: none !important;
+        width: 100% !important;
+        height: 90px !important;
+        padding: 0 !important;
+        color: inherit !important;
+        font-weight: bold !important;
+        position: absolute;
+        top: 0; left: 0; z-index: 10;
     }
-    /* 消除格子間距，達成看板視覺感 */
-    div[data-testid="column"] { padding: 0px !important; margin: 0px !important; }
-    .stHorizontalBlock { gap: 0px !important; }
-    /* 星期表頭 */
-    .weekday-header { text-align: center; background-color: #f8fafc; border: 1px solid #cbd5e0; padding: 5px 0; font-weight: bold; font-size: 14px; }
+    /* 📍 標記樣式 */
+    .note-marker { color: #FF4B4B; font-size: 16px; position: absolute; top: 2px; right: 4px; z-index: 5; }
+    /* 格子內的文字排列 */
+    .cell-box { pointer-events: none; padding-top: 15px; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("🔋 二休二排班助手")
 
-# --- 3. 登入控制 (使用 Key 記住輸入，免重打) ---
+# --- 3. 登入控制 (使用 Key 記住輸入，免去重複輸入) ---
 try:
     res_s = supabase.table("staff_list").select("name").execute()
     staff_list = [item['name'] for item in res_s.data]
@@ -44,10 +54,9 @@ except: staff_list = []
 
 with st.container(border=True):
     c1, c2 = st.columns(2)
-    # 使用 key 持久化輸入資訊
-    current_user = c1.selectbox("👤 我的姓名", ["請選擇"] + staff_list, key="persist_user")
-    user_pwd = c2.text_input("🔑 解鎖金鑰", type="password", key="persist_pwd")
-    st.info("💡 密碼設定後不可修改，系統不記錄。")
+    current_user = c1.selectbox("👤 選擇姓名", ["請選擇"] + staff_list, key="keep_u")
+    user_pwd = c2.text_input("🔑 輸入金鑰", type="password", key="keep_p")
+    st.caption("⚠️ 密碼設定後不可修改，系統不記錄，請務必記牢。")
 
 # --- 4. 月份切換 ---
 if 'sel_year' not in st.session_state: st.session_state.sel_year = date.today().year
@@ -58,13 +67,13 @@ if m1.button("◀️"):
     st.session_state.sel_month = 12 if st.session_state.sel_month == 1 else st.session_state.sel_month - 1
     if st.session_state.sel_month == 12: st.session_state.sel_year -= 1
     st.rerun()
-with m2: st.markdown(f"<h3 style='text-align: center;'>{st.session_state.sel_year} / {st.session_state.sel_month}</h3>", unsafe_allow_html=True)
+with m2: st.markdown(f"<h3 style='text-align: center; margin: 0;'>{st.session_state.sel_year} 年 {st.session_state.sel_month} 月</h3>", unsafe_allow_html=True)
 if m3.button("▶️"):
     st.session_state.sel_month = 1 if st.session_state.sel_month == 12 else st.session_state.sel_month + 1
     if st.session_state.sel_month == 1: st.session_state.sel_year += 1
     st.rerun()
 
-# --- 5. 抓取個人標記 ---
+# --- 5. 抓取標記 ---
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
     try:
@@ -72,16 +81,16 @@ if current_user != "請選擇" and user_pwd:
         my_noted_dates = {item['date'] for item in res_n.data}
     except: pass
 
-# --- 6. 核心繪製邏輯 ---
+# --- 6. 核心繪製與彈窗 ---
 def get_shift_info(target_date):
     base_date = date(2026, 1, 30)
     rem = (target_date - base_date).days % 4
     # AC班：綠色底，BD班：橘色底
     return ("AC", "#D4EDDA", "#155724") if rem in [0, 1] else ("BD", "#FFF3CD", "#856404")
 
-@st.dialog("📝 加密備註編輯器")
+@st.dialog("📝 專屬加密備註")
 def show_note_editor(target_date, user, pwd):
-    st.write(f"📅 日期：{target_date} | 👤 使用者：{user}")
+    st.write(f"📅 日期：{target_date} | 👤 持有人：{user}")
     content = ""
     try:
         f = get_encryption_key(pwd)
@@ -90,7 +99,7 @@ def show_note_editor(target_date, user, pwd):
     except: st.warning("目前無紀錄或解密失敗。")
     
     new_text = st.text_area("備註內容", value=content, height=180)
-    if st.button("🔒 安全加密儲存", use_container_width=True):
+    if st.button("🔒 儲存加密內容", use_container_width=True):
         token = get_encryption_key(pwd).encrypt(new_text.encode()).decode()
         supabase.table("private_notes").upsert({"date": str(target_date), "owner": user, "content": token}).execute()
         st.success("儲存成功！")
@@ -99,9 +108,9 @@ def show_note_editor(target_date, user, pwd):
 # 顯示星期表頭
 h_cols = st.columns(7)
 for i, d_name in enumerate(["日","一","二","三","四","五","六"]):
-    h_cols[i].markdown(f"<div class='weekday-header'>{d_name}</div>", unsafe_allow_html=True)
+    h_cols[i].markdown(f"<div style='text-align:center; background:#f8fafc; border:1px solid #cbd5e0; padding:5px 0; font-weight:bold;'>{d_name}</div>", unsafe_allow_html=True)
 
-# 顯示網格
+# 顯示月曆網格
 cal_obj = calendar.Calendar(firstweekday=6)
 weeks = cal_obj.monthdatescalendar(st.session_state.sel_year, st.session_state.sel_month)
 
@@ -112,17 +121,26 @@ for week in weeks:
         is_curr = (d.month == st.session_state.sel_month)
         team, bg, txt = get_shift_info(d)
         dot = "📍" if d_str in my_noted_dates else ""
-        btn_label = f"{dot}{d.day}\n{team}" if is_curr else ""
         
-        # 注入背景色彩 CSS 到特定按鈕 Key
-        st.markdown(f"<style>button[key='btn_{d_str}'] {{ background-color: {bg if is_curr else '#ffffff'} !important; color: {txt if is_curr else '#ccc'} !important; }}</style>", unsafe_allow_html=True)
+        # 底層：漂亮的彩色表格格子
+        cols[i].markdown(f"""
+            <div style="background-color:{bg}; opacity:{'1.0' if is_curr else '0.2'}; height:90px; border:1px solid #cbd5e0; position:relative; color:{txt}; text-align:center;">
+                <span class="note-marker">{dot}</span>
+                <div class="cell-box">
+                    <div style="font-size:20px; font-weight:bold;">{d.day}</div>
+                    <div style="font-size:10px;">{team}</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
         
-        if cols[i].button(btn_label, key=f"btn_{d_str}"):
-            if is_curr:
-                if current_user == "請選擇" or not user_pwd:
-                    st.error("❌ 請先輸入姓名與金鑰")
-                else:
-                    show_note_editor(d, current_user, user_pwd)
+        # 表層：透明按鈕負責點擊 (不重整、不噴碼)
+        with cols[i]:
+            if st.button("", key=f"b_{d_str}"):
+                if is_curr:
+                    if current_user == "請選擇" or not user_pwd:
+                        st.error("❌ 請先選名字並輸金鑰")
+                    else:
+                        show_note_editor(d, current_user, user_pwd)
 
 st.divider()
 with st.expander("🛠️ 註冊新人員"):
