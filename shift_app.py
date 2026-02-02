@@ -32,10 +32,8 @@ st.title("🔋 二休二排班助手")
 
 if "clicked_date" not in st.session_state:
     st.session_state.clicked_date = None
-
 if "year" not in st.session_state:
     st.session_state.year = date.today().year
-
 if "month" not in st.session_state:
     st.session_state.month = date.today().month
 
@@ -61,12 +59,7 @@ with st.container(border=True):
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
     try:
-        r = (
-            supabase.table("private_notes")
-            .select("date")
-            .eq("owner", current_user)
-            .execute()
-        )
+        r = supabase.table("private_notes").select("date").eq("owner", current_user).execute()
         my_noted_dates = {i["date"] for i in (r.data or [])}
     except Exception:
         pass
@@ -103,119 +96,79 @@ def get_shift(d: date):
     base = date(2026, 1, 30)
     return "AC" if (d - base).days % 4 in (0, 1) else "BD"
 
-cal = calendar.Calendar(firstweekday=6)  # 週日開頭
+cal = calendar.Calendar(firstweekday=6)
 weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. CSS（手機固定 7 欄 + 一頁看整月）
+# 7. CSS（穩定可讀版）
 # ===============================
-st.markdown(
-    """
+st.markdown("""
 <style>
-/* 讓上方 Streamlit 預設容器不要太寬，手機更好看 */
 .block-container { padding-top: 1.2rem; padding-bottom: 1.2rem; }
 
-/* 固定 7 欄：不使用 st.columns()，用 CSS Grid 自己掌控 */
 .cal-wrap{
   max-width: 760px;
   margin: 0 auto;
+  background:#0b0f19;
+  padding:12px;
+  border-radius:16px;
 }
 
-/* 星期列 / 月曆格 都用同一個 grid */
 .cal-grid{
   display:grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(7, 1fr);
+  gap:6px;
 }
 
-/* 星期標題 */
 .cal-dow{
   text-align:center;
   font-weight:700;
   color:#ffffff;
-  opacity:0.9;
-  padding: 4px 0;
+  padding:4px 0;
 }
 
-/* 日期格 */
 .cal-cell{
   background: var(--bg);
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.12);
-  padding: 6px 4px;
-  height: 62px;          /* ⭐ 手機一頁看整月：高度縮小 */
+  border-radius:10px;
+  padding:6px 4px;
+  height:60px;
   text-align:center;
   cursor:pointer;
-  user-select:none;
-  color:#000000;         /* ⭐ 強制黑字 */
-  box-shadow: 0 8px 18px rgba(0,0,0,0.18);
-  position: relative;
-  overflow:hidden;
+  color:#111111;
+  box-shadow:0 4px 10px rgba(0,0,0,.25);
 }
 
-/* 非本月日期淡化 */
-.cal-out{ opacity: 0.35; }
+.cal-out{
+  background:#1f2937 !important;
+  color:#9ca3af !important;
+}
 
-/* 今天紅框 */
 .cal-today{
-  outline: 2px solid #ef4444;
-  outline-offset: -2px;
+  outline:2px solid #ef4444;
+  outline-offset:-2px;
 }
 
-/* 日期數字 */
-.cal-day{
-  font-weight: 800;
-  font-size: 14px;
-  line-height: 1.1;
-}
+.cal-day{ font-weight:800; font-size:14px; }
+.cal-shift{ font-size:11px; margin-top:2px; }
+.cal-note{ font-size:11px; margin-top:2px; }
 
-/* 班別 */
-.cal-shift{
-  font-size: 11px;
-  line-height: 1.1;
-  margin-top: 2px;
-}
-
-/* 記號 */
-.cal-note{
-  font-size: 11px;
-  line-height: 1;
-  margin-top: 2px;
-}
-
-/* 手機再更緊湊一點 */
-@media (max-width: 420px){
-  .cal-grid{ gap: 5px; }
-  .cal-cell{
-    height: 56px;
-    padding: 5px 3px;
-    border-radius: 9px;
-  }
-  .cal-day{ font-size: 13px; }
-  .cal-shift{ font-size: 10px; }
+@media (max-width:420px){
+  .cal-cell{ height:56px; }
+  .cal-day{ font-size:13px; }
+  .cal-shift{ font-size:10px; }
 }
 </style>
-""",
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 # ===============================
-# 8. Calendar UI（固定 7 欄）
+# 8. Calendar UI
 # ===============================
 st.markdown("#### 📆 點選日期新增 / 查看備註")
 
-weekdays = ["日", "一", "二", "三", "四", "五", "六"]
+weekdays = ["日","一","二","三","四","五","六"]
 
-# 星期列
-st.markdown(
-    "<div class='cal-wrap'><div class='cal-grid'>"
-    + "".join([f"<div class='cal-dow'>{w}</div>" for w in weekdays])
-    + "</div></div>",
-    unsafe_allow_html=True,
-)
-
-# 日期格（點擊用 query param 傳值，避免 Streamlit columns 手機塌掉）
 html = "<div class='cal-wrap'><div class='cal-grid'>"
+html += "".join([f"<div class='cal-dow'>{w}</div>" for w in weekdays])
 
 today = date.today()
 cur_month = st.session_state.month
@@ -236,12 +189,11 @@ for week in weeks:
 
         mark = "📍" if has_note else ""
 
-        # ⭐ 點擊：把 d 放進 query string，觸發 rerun，再由 st.query_params 讀取
         html += f"""
         <div class="{cls}" style="--bg:{bg}"
              onclick="
                const u = new URL(window.location.href);
-               u.searchParams.set('d', '{d_str}');
+               u.searchParams.set('d','{d_str}');
                window.location.href = u.toString();
              ">
           <div class="cal-day">{d.day}</div>
@@ -251,24 +203,20 @@ for week in weeks:
         """
 
 html += "</div></div>"
-components.html(
-    html,
-    height=520,   # 手機一頁顯示整個月
-    scrolling=False
-)
+
+components.html(html, height=520, scrolling=False)
 
 # ===============================
-# 9. 讀取 query param → 觸發 dialog
+# 9. Query param → dialog
 # ===============================
-# Streamlit 版本不同，query params API 可能略有差異，這裡做兼容
 clicked = None
 try:
     clicked = st.query_params.get("d")
 except Exception:
     try:
-        clicked = st.experimental_get_query_params().get("d", [None])[0]
+        clicked = st.experimental_get_query_params().get("d",[None])[0]
     except Exception:
-        clicked = None
+        pass
 
 if clicked:
     st.session_state.clicked_date = clicked
@@ -283,13 +231,7 @@ def show_note_editor(target_date, user, pwd):
 
     try:
         f = get_encryption_key(pwd)
-        r = (
-            supabase.table("private_notes")
-            .select("content")
-            .eq("date", target_date)
-            .eq("owner", user)
-            .execute()
-        )
+        r = supabase.table("private_notes").select("content").eq("date", target_date).eq("owner", user).execute()
         if r.data:
             content = f.decrypt(r.data[0]["content"].encode()).decode()
     except Exception:
@@ -299,21 +241,17 @@ def show_note_editor(target_date, user, pwd):
 
     if st.button("🔒 安全加密儲存", use_container_width=True):
         token = get_encryption_key(pwd).encrypt(txt.encode()).decode()
-        (
-            supabase.table("private_notes")
-            .upsert({"date": target_date, "owner": user, "content": token})
-            .execute()
-        )
+        supabase.table("private_notes").upsert({
+            "date": target_date,
+            "owner": user,
+            "content": token
+        }).execute()
 
-        # 清掉點擊狀態 + 清掉 query param，避免一直反覆彈出
         st.session_state.clicked_date = None
         try:
             st.query_params.pop("d", None)
         except Exception:
-            try:
-                st.experimental_set_query_params()
-            except Exception:
-                pass
+            pass
 
         st.success("✅ 已儲存")
         st.rerun()
@@ -323,20 +261,7 @@ def show_note_editor(target_date, user, pwd):
 # ===============================
 if st.session_state.get("clicked_date"):
     if current_user != "請選擇" and user_pwd:
-        show_note_editor(
-            st.session_state.clicked_date,
-            current_user,
-            user_pwd,
-        )
+        show_note_editor(st.session_state.clicked_date, current_user, user_pwd)
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
-        # 同步清 query param，避免再次觸發
-        try:
-            st.query_params.pop("d", None)
-        except Exception:
-            try:
-                st.experimental_set_query_params()
-            except Exception:
-                pass
-
