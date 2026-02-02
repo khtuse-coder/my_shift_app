@@ -24,7 +24,7 @@ def get_encryption_key(password: str):
     return Fernet(base64.urlsafe_b64encode(kdf.derive(password.encode())))
 
 # ===============================
-# 2. 基本設定
+# 2. Page 設定
 # ===============================
 st.set_page_config(page_title="二休二人力看板", layout="centered")
 st.title("🔋 二休二排班助手")
@@ -33,11 +33,11 @@ if "clicked_date" not in st.session_state:
     st.session_state.clicked_date = None
 
 # ===============================
-# 3. 登入區
+# 3. 登入
 # ===============================
 try:
-    res_s = supabase.table("staff_list").select("name").execute()
-    staff_list = [i["name"] for i in res_s.data]
+    res = supabase.table("staff_list").select("name").execute()
+    staff_list = [i["name"] for i in res.data]
 except:
     staff_list = []
 
@@ -49,147 +49,174 @@ with st.container(border=True):
     st.caption("⚠️ 密碼僅用於本地加密，系統無法復原")
 
 # ===============================
-# 4. 取得有備註的日期
+# 4. 有備註日期
 # ===============================
 my_noted_dates = set()
 if current_user != "請選擇" and user_pwd:
     try:
-        res_n = supabase.table("private_notes") \
-            .select("date") \
-            .eq("owner", current_user) \
-            .execute()
-        my_noted_dates = {i["date"] for i in res_n.data}
+        r = supabase.table("private_notes").select("date").eq("owner", current_user).execute()
+        my_noted_dates = {i["date"] for i in r.data}
     except:
         pass
 
 # ===============================
 # 5. 月份切換
 # ===============================
-if "sel_year" not in st.session_state:
-    st.session_state.sel_year = date.today().year
-if "sel_month" not in st.session_state:
-    st.session_state.sel_month = date.today().month
+if "year" not in st.session_state:
+    st.session_state.year = date.today().year
+if "month" not in st.session_state:
+    st.session_state.month = date.today().month
 
-c1, c2, c3 = st.columns([1, 4, 1])
+c1, c2, c3 = st.columns([1,4,1])
 if c1.button("◀️"):
-    st.session_state.sel_month -= 1
-    if st.session_state.sel_month == 0:
-        st.session_state.sel_month = 12
-        st.session_state.sel_year -= 1
+    st.session_state.month -= 1
+    if st.session_state.month == 0:
+        st.session_state.month = 12
+        st.session_state.year -= 1
     st.rerun()
 
 with c2:
     st.markdown(
-        f"<h3 style='text-align:center'>{st.session_state.sel_year} 年 {st.session_state.sel_month} 月</h3>",
+        f"<h3 style='text-align:center'>{st.session_state.year} / {st.session_state.month}</h3>",
         unsafe_allow_html=True
     )
 
 if c3.button("▶️"):
-    st.session_state.sel_month += 1
-    if st.session_state.sel_month == 13:
-        st.session_state.sel_month = 1
-        st.session_state.sel_year += 1
+    st.session_state.month += 1
+    if st.session_state.month == 13:
+        st.session_state.month = 1
+        st.session_state.year += 1
     st.rerun()
 
 # ===============================
 # 6. 二休二邏輯
 # ===============================
-def get_shift_info(d):
-    base_date = date(2026, 1, 30)
-    rem = (d - base_date).days % 4
-    return "AC" if rem in [0, 1] else "BD"
+def get_shift(d):
+    base = date(2026, 1, 30)
+    return "AC" if (d - base).days % 4 in [0, 1] else "BD"
 
 cal = calendar.Calendar(firstweekday=6)
-weeks = cal.monthdatescalendar(
-    st.session_state.sel_year,
-    st.session_state.sel_month
-)
+weeks = cal.monthdatescalendar(st.session_state.year, st.session_state.month)
 
 # ===============================
-# 7. 月曆（可點擊）
+# 7. CSS（固定 Grid）
+# ===============================
+st.markdown("""
+<style>
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.day-cell {
+  height: 72px;
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+  cursor: pointer;
+}
+.day-num {
+  font-size: 16px;
+  font-weight: bold;
+}
+.shift {
+  font-size: 11px;
+  opacity: 0.8;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ===============================
+# 8. 月曆 Grid
 # ===============================
 st.markdown("#### 📆 點選日期新增 / 查看備註")
 
+html = "<div class='calendar-grid'>"
+
 for week in weeks:
-    cols = st.columns(7)
-    for i, d in enumerate(week):
+    for d in week:
         d_str = str(d)
-        is_curr = d.month == st.session_state.sel_month
-        team = get_shift_info(d)
+        is_curr = d.month == st.session_state.month
+        team = get_shift(d)
         mark = "📍" if d_str in my_noted_dates else ""
 
-        with cols[i]:
-            if not is_curr:
-                st.markdown(
-                    "<div style='height:90px; opacity:0.3; background:#eee'></div>",
-                    unsafe_allow_html=True
-                )
-            else:
-                if st.button(
-                    f"{mark}\n{d.day}\n{team}",
-                    key=f"day_{d_str}",
-                    use_container_width=True
-                ):
-                    if current_user != "請選擇" and user_pwd:
-                        st.session_state.clicked_date = d_str
-                    else:
-                        st.error("❌ 請先選人員並輸入金鑰")
+        bg = "#d1fae5" if team == "AC" else "#fef3c7"
+        opacity = "1" if is_curr else "0.3"
+
+        html += f"""
+        <div class="day-cell"
+             style="background:{bg};opacity:{opacity}"
+             onclick="window.parent.postMessage('{d_str}', '*')">
+            <div class="day-num">{d.day}</div>
+            <div class="shift">{team}</div>
+            <div>{mark}</div>
+        </div>
+        """
+
+html += "</div>"
+st.markdown(html, unsafe_allow_html=True)
 
 # ===============================
-# 8. 備註 Dialog
+# 9. JS → Streamlit
+# ===============================
+st.markdown("""
+<script>
+window.addEventListener("message", (e) => {
+  const v = e.data;
+  if (typeof v === "string" && v.includes("-")) {
+    fetch("/_stcore/stream", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({clicked_date: v})
+    });
+  }
+});
+</script>
+""", unsafe_allow_html=True)
+
+if st.session_state.get("clicked_date"):
+    if current_user != "請選擇" and user_pwd:
+        pass
+    else:
+        st.error("❌ 請先選擇人員並輸入金鑰")
+
+# ===============================
+# 10. 備註 Dialog
 # ===============================
 @st.dialog("📋 專屬加密備註")
 def show_note_editor(target_date, user, pwd):
     st.write(f"📅 日期：{target_date}")
-    st.write(f"👤 使用者：{user}")
-
     content = ""
     try:
         f = get_encryption_key(pwd)
-        res = supabase.table("private_notes") \
+        r = supabase.table("private_notes") \
             .select("content") \
             .eq("date", target_date) \
-            .eq("owner", user) \
-            .execute()
-        if res.data:
-            content = f.decrypt(res.data[0]["content"].encode()).decode()
+            .eq("owner", user).execute()
+        if r.data:
+            content = f.decrypt(r.data[0]["content"].encode()).decode()
     except:
         st.warning("⚠️ 無法解密或尚無備註")
 
-    new_text = st.text_area("備註內容", value=content, height=160)
+    txt = st.text_area("備註內容", value=content, height=160)
 
     if st.button("🔒 安全加密儲存", use_container_width=True):
-        token = get_encryption_key(pwd).encrypt(new_text.encode()).decode()
+        token = get_encryption_key(pwd).encrypt(txt.encode()).decode()
         supabase.table("private_notes").upsert({
             "date": target_date,
             "owner": user,
             "content": token
         }).execute()
-
-        st.success("✅ 已儲存")
         st.session_state.clicked_date = None
+        st.success("已儲存")
         st.rerun()
 
 # ===============================
-# 9. 觸發 Dialog
+# 11. 觸發 Dialog
 # ===============================
-if st.session_state.clicked_date:
+if st.session_state.get("clicked_date"):
     show_note_editor(
         st.session_state.clicked_date,
         current_user,
         user_pwd
     )
-
-# ===============================
-# 10. 管理員註冊
-# ===============================
-with st.expander("🛠️ 註冊新人員"):
-    n_name = st.text_input("姓名")
-    if st.button("完成註冊"):
-        supabase.table("staff_list").insert({
-            "name": n_name,
-            "team": "A",
-            "shift_type": "日班"
-        }).execute()
-        st.success("已註冊")
-        st.rerun()
