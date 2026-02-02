@@ -133,14 +133,28 @@ for week in weeks:
             background:{bg};
             opacity:{opacity};
             border:{border};
-            border-radius:12px;
-            padding:6px;
-            height:82px;
+            border-radius:10px;
+            padding:4px;
+            height:58px;              /* ⭐ 原本 82 → 58 */
             text-align:center;
+            color:#000000;            /* ⭐ 強制黑字 */
         ">
-            <div style="font-weight:bold;font-size:16px">{d.day}</div>
-            <div style="font-size:12px">{team}</div>
-            <div>{'📍' if has_note else ''}</div>
+            <div style="
+                font-weight:bold;
+                font-size:14px;        /* ⭐ 原本 16 → 14 */
+                line-height:1.1;
+            ">
+                {d.day}
+            </div>
+            <div style="
+                font-size:11px;
+                line-height:1.1;
+            ">
+                {team}
+            </div>
+            <div style="font-size:10px; line-height:1;">
+                {'📍' if has_note else ''}
+            </div>
         </div>
         """
 
@@ -197,3 +211,4 @@ if st.session_state.get("clicked_date"):
     else:
         st.warning("❌ 請先選擇人員並輸入金鑰")
         st.session_state.clicked_date = None
+
